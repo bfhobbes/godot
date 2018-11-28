@@ -1060,7 +1060,7 @@ void CodeTextEditor::delete_lines() {
 	text_editor->end_complex_operation();
 }
 
-void CodeTextEditor::code_lines_down() {
+void CodeTextEditor::clone_lines_down() {
 	int from_line = text_editor->cursor_get_line();
 	int to_line = text_editor->cursor_get_line();
 	int column = text_editor->cursor_get_column();
@@ -1072,20 +1072,19 @@ void CodeTextEditor::code_lines_down() {
 	}
 	int next_line = to_line + 1;
 
-	if (to_line >= text_editor->get_line_count() - 1) {
-		text_editor->set_line(to_line, text_editor->get_line(to_line) + "\n");
-	}
-
+	bool caret_at_start = text_editor->cursor_get_line() == from_line;
 	text_editor->begin_complex_operation();
 	for (int i = from_line; i <= to_line; i++) {
-
 		text_editor->unfold_line(i);
-		if (i >= text_editor->get_line_count() - 1) {
-			text_editor->set_line(i, text_editor->get_line(i) + "\n");
-		}
-		String line_clone = text_editor->get_line(i);
-		text_editor->insert_at(line_clone, next_line);
+		text_editor->set_line(next_line - 1, text_editor->get_line(next_line - 1) + "\n");
+		text_editor->set_line(next_line, text_editor->get_line(i));
 		next_line++;
+	}
+
+	if (caret_at_start) {
+		text_editor->cursor_set_line(to_line + 1);
+	} else {
+		text_editor->cursor_set_line(next_line - 1);
 	}
 
 	text_editor->cursor_set_column(column);
@@ -1131,6 +1130,19 @@ void CodeTextEditor::set_edit_state(const Variant &p_state) {
 void CodeTextEditor::set_error(const String &p_error) {
 
 	error->set_text(p_error);
+	error->set_tooltip(p_error);
+	error->set_visible(p_error != "");
+}
+
+void CodeTextEditor::set_error_pos(int p_line, int p_column) {
+	error_line = p_line;
+	error_column = p_column;
+}
+
+void CodeTextEditor::_error_pressed() {
+	text_editor->cursor_set_line(error_line);
+	text_editor->cursor_set_column(error_column);
+	text_editor->center_viewport_to_cursor();
 }
 
 void CodeTextEditor::_update_font() {
@@ -1192,6 +1204,7 @@ void CodeTextEditor::_bind_methods() {
 	ClassDB::bind_method("_code_complete_timer_timeout", &CodeTextEditor::_code_complete_timer_timeout);
 	ClassDB::bind_method("_complete_request", &CodeTextEditor::_complete_request);
 	ClassDB::bind_method("_font_resize_timeout", &CodeTextEditor::_font_resize_timeout);
+	ClassDB::bind_method("_error_pressed", &CodeTextEditor::_error_pressed);
 
 	ADD_SIGNAL(MethodInfo("validate_script"));
 	ADD_SIGNAL(MethodInfo("load_theme_settings"));
@@ -1240,13 +1253,22 @@ CodeTextEditor::CodeTextEditor() {
 
 	code_complete_timer->set_wait_time(EDITOR_DEF("text_editor/completion/code_complete_delay", .3f));
 
-	error = memnew(Label);
-	status_bar->add_child(error);
-	error->set_autowrap(true);
-	error->set_valign(Label::VALIGN_CENTER);
+	error_line = 0;
+	error_column = 0;
+
+	Control *error_box = memnew(Control);
+	status_bar->add_child(error_box);
+	error_box->set_v_size_flags(SIZE_EXPAND_FILL);
+	error_box->set_h_size_flags(SIZE_EXPAND_FILL);
+	error_box->set_clip_contents(true);
+
+	error = memnew(LinkButton);
+	error_box->add_child(error);
+	error->set_anchors_and_margins_preset(Control::PRESET_CENTER_LEFT);
+	error->set_underline_mode(LinkButton::UNDERLINE_MODE_ON_HOVER);
 	error->add_color_override("font_color", EditorNode::get_singleton()->get_gui_base()->get_color("error_color", "Editor"));
 	error->add_font_override("font", EditorNode::get_singleton()->get_gui_base()->get_font("status_source", "EditorFonts"));
-	error->set_h_size_flags(SIZE_EXPAND_FILL); //required for it to display, given now it's clipping contents, do not touch
+	error->connect("pressed", this, "_error_pressed");
 	find_replace_bar->connect("error", error, "set_text");
 
 	status_bar->add_child(memnew(Label)); //to keep the height if the other labels are not visible
