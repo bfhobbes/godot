@@ -5,8 +5,8 @@
 /*                           GODOT ENGINE                                */
 /*                      https://godotengine.org                          */
 /*************************************************************************/
-/* Copyright (c) 2007-2018 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2018 Godot Engine contributors (cf. AUTHORS.md)    */
+/* Copyright (c) 2007-2019 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2014-2019 Godot Engine contributors (cf. AUTHORS.md)    */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -31,12 +31,11 @@
 #ifndef VISUAL_SERVER_RASTER_H
 #define VISUAL_SERVER_RASTER_H
 
-#include "core/allocators.h"
 #include "core/math/octree.h"
 #include "servers/visual/rasterizer.h"
 #include "servers/visual_server.h"
 #include "visual_server_canvas.h"
-#include "visual_server_global.h"
+#include "visual_server_globals.h"
 #include "visual_server_scene.h"
 #include "visual_server_viewport.h"
 /**
@@ -495,6 +494,7 @@ public:
 	BIND2(environment_set_background, RID, EnvironmentBG)
 	BIND2(environment_set_sky, RID, RID)
 	BIND2(environment_set_sky_custom_fov, RID, float)
+	BIND2(environment_set_sky_orientation, RID, const Basis &)
 	BIND2(environment_set_bg_color, RID, const Color &)
 	BIND2(environment_set_bg_energy, RID, float)
 	BIND2(environment_set_canvas_max_layer, RID, int)

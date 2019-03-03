@@ -5,8 +5,8 @@
 /*                           GODOT ENGINE                                */
 /*                      https://godotengine.org                          */
 /*************************************************************************/
-/* Copyright (c) 2007-2018 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2018 Godot Engine contributors (cf. AUTHORS.md)    */
+/* Copyright (c) 2007-2019 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2014-2019 Godot Engine contributors (cf. AUTHORS.md)    */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -777,7 +777,7 @@ void ScriptEditorDebugger::_parse_message(const String &p_msg, const Array &p_da
 
 		for (int i = 0; i < scc; i += 3) {
 			String script = p_data[2 + i];
-			String method = p_data[3 + i];
+			String method2 = p_data[3 + i];
 			int line = p_data[4 + i];
 			TreeItem *stack_trace = error_tree->create_item(error);
 
@@ -791,7 +791,7 @@ void ScriptEditorDebugger::_parse_message(const String &p_msg, const Array &p_da
 				stack_trace->set_text_align(0, TreeItem::ALIGN_LEFT);
 				error->set_metadata(0, meta);
 			}
-			stack_trace->set_text(1, script.get_file() + ":" + itos(line) + " @ " + method + "()");
+			stack_trace->set_text(1, script.get_file() + ":" + itos(line) + " @ " + method2 + "()");
 		}
 
 		if (warning)
@@ -859,18 +859,18 @@ void ScriptEditorDebugger::_parse_message(const String &p_msg, const Array &p_da
 			c.items.resize(values.size() / 2);
 			c.total_time = 0;
 			c.signature = "categ::" + name;
-			for (int i = 0; i < values.size(); i += 2) {
+			for (int j = 0; j < values.size(); j += 2) {
 
 				EditorProfiler::Metric::Category::Item item;
 				item.calls = 1;
 				item.line = 0;
-				item.name = values[i];
-				item.self = values[i + 1];
+				item.name = values[j];
+				item.self = values[j + 1];
 				item.total = item.self;
 				item.signature = "categ::" + name + "::" + item.name;
 				item.name = item.name.capitalize();
 				c.total_time += item.total;
-				c.items.write[i / 2] = item;
+				c.items.write[j / 2] = item;
 			}
 			metric.categories.push_back(c);
 		}
@@ -898,6 +898,10 @@ void ScriptEditorDebugger::_parse_message(const String &p_msg, const Array &p_da
 					item.name = strings[2];
 					item.script = strings[0];
 					item.line = strings[1].to_int();
+				} else if (strings.size() == 4) { //Built-in scripts have an :: in their name
+					item.name = strings[3];
+					item.script = strings[0] + "::" + strings[1];
+					item.line = strings[2].to_int();
 				}
 
 			} else {
@@ -998,13 +1002,13 @@ void ScriptEditorDebugger::_performance_draw() {
 			float m = perf_max[pi];
 			if (m == 0)
 				m = 0.00001;
-			float h = E->get()[pi] / m;
-			h = (1.0 - h) * r.size.y;
+			float h2 = E->get()[pi] / m;
+			h2 = (1.0 - h2) * r.size.y;
 
 			c.a = 0.7;
 			if (E != perf_history.front())
-				perf_draw->draw_line(r.position + Point2(from, h), r.position + Point2(from + spacing, prev), c, 2.0);
-			prev = h;
+				perf_draw->draw_line(r.position + Point2(from, h2), r.position + Point2(from + spacing, prev), c, 2.0);
+			prev = h2;
 			E = E->next();
 			from -= spacing;
 		}
@@ -1080,19 +1084,19 @@ void ScriptEditorDebugger::_notification(int p_what) {
 			if (error_count != last_error_count || warning_count != last_warning_count) {
 
 				if (error_count == 0 && warning_count == 0) {
-					error_tree->set_name(TTR("Errors"));
+					errors_tab->set_name(TTR("Errors"));
 					debugger_button->set_text(TTR("Debugger"));
 					debugger_button->set_icon(Ref<Texture>());
-					tabs->set_tab_icon(error_tree->get_index(), Ref<Texture>());
+					tabs->set_tab_icon(errors_tab->get_index(), Ref<Texture>());
 				} else {
-					error_tree->set_name(TTR("Errors") + " (" + itos(error_count + warning_count) + ")");
+					errors_tab->set_name(TTR("Errors") + " (" + itos(error_count + warning_count) + ")");
 					debugger_button->set_text(TTR("Debugger") + " (" + itos(error_count + warning_count) + ")");
 					if (error_count == 0) {
 						debugger_button->set_icon(get_icon("Warning", "EditorIcons"));
-						tabs->set_tab_icon(error_tree->get_index(), get_icon("Warning", "EditorIcons"));
+						tabs->set_tab_icon(errors_tab->get_index(), get_icon("Warning", "EditorIcons"));
 					} else {
 						debugger_button->set_icon(get_icon("Error", "EditorIcons"));
-						tabs->set_tab_icon(error_tree->get_index(), get_icon("Error", "EditorIcons"));
+						tabs->set_tab_icon(errors_tab->get_index(), get_icon("Error", "EditorIcons"));
 					}
 				}
 				last_error_count = error_count;
@@ -1532,14 +1536,14 @@ void ScriptEditorDebugger::_property_changed(Object *p_base, const StringName &p
 		int pathid = _get_res_path_cache(respath);
 
 		if (p_value.is_ref()) {
-			Ref<Resource> res = p_value;
-			if (res.is_valid() && res->get_path() != String()) {
+			Ref<Resource> res2 = p_value;
+			if (res2.is_valid() && res2->get_path() != String()) {
 
 				Array msg;
 				msg.push_back("live_res_prop_res");
 				msg.push_back(pathid);
 				msg.push_back(p_property);
-				msg.push_back(res->get_path());
+				msg.push_back(res2->get_path());
 				ppeer->put_var(msg);
 			}
 		} else {
@@ -2050,11 +2054,11 @@ ScriptEditorDebugger::ScriptEditorDebugger(EditorNode *p_editor) {
 	}
 
 	{ //errors
-		VBoxContainer *errvb = memnew(VBoxContainer);
-		errvb->set_name(TTR("Errors"));
+		errors_tab = memnew(VBoxContainer);
+		errors_tab->set_name(TTR("Errors"));
 
 		HBoxContainer *errhb = memnew(HBoxContainer);
-		errvb->add_child(errhb);
+		errors_tab->add_child(errhb);
 
 		Button *expand_all = memnew(Button);
 		expand_all->set_text(TTR("Expand All"));
@@ -2089,13 +2093,13 @@ ScriptEditorDebugger::ScriptEditorDebugger(EditorNode *p_editor) {
 		error_tree->set_v_size_flags(SIZE_EXPAND_FILL);
 		error_tree->set_allow_rmb_select(true);
 		error_tree->connect("item_rmb_selected", this, "_error_tree_item_rmb_selected");
-		errvb->add_child(error_tree);
+		errors_tab->add_child(error_tree);
 
 		item_menu = memnew(PopupMenu);
 		item_menu->connect("id_pressed", this, "_item_menu_id_pressed");
 		error_tree->add_child(item_menu);
 
-		tabs->add_child(errvb);
+		tabs->add_child(errors_tab);
 	}
 
 	{ // remote scene tree

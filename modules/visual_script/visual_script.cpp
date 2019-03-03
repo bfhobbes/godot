@@ -5,8 +5,8 @@
 /*                           GODOT ENGINE                                */
 /*                      https://godotengine.org                          */
 /*************************************************************************/
-/* Copyright (c) 2007-2018 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2018 Godot Engine contributors (cf. AUTHORS.md)    */
+/* Copyright (c) 2007-2019 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2014-2019 Godot Engine contributors (cf. AUTHORS.md)    */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -1165,9 +1165,9 @@ void VisualScript::_set_data(const Dictionary &p_data) {
 
 		Array nodes = func["nodes"];
 
-		for (int i = 0; i < nodes.size(); i += 3) {
+		for (int j = 0; j < nodes.size(); j += 3) {
 
-			add_node(name, nodes[i], nodes[i + 2], nodes[i + 1]);
+			add_node(name, nodes[j], nodes[j + 2], nodes[j + 1]);
 		}
 
 		Array sequence_connections = func["sequence_connections"];

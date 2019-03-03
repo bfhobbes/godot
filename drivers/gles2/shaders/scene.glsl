@@ -2,6 +2,7 @@
 [vertex]
 
 #ifdef USE_GLES_OVER_GL
+#define lowp
 #define mediump
 #define highp
 #else
@@ -84,7 +85,7 @@ uniform highp mat4 world_transform;
 
 uniform highp float time;
 
-
+uniform highp vec2 viewport_size;
 
 #ifdef RENDER_DEPTH
 uniform float light_bias;
@@ -94,6 +95,10 @@ uniform float light_normal_bias;
 //
 // varyings
 //
+
+#if defined(RENDER_DEPTH) && defined(USE_RGBA_SHADOWS)
+varying highp vec4 position_interp;
+#endif
 
 varying highp vec3 vertex_interp;
 varying vec3 normal_interp;
@@ -157,6 +162,7 @@ varying highp vec3 specular_interp;
 
 // general for all lights
 uniform highp vec4 light_color;
+uniform highp vec4 shadow_color;
 uniform highp float light_specular;
 
 // directional
@@ -351,6 +357,10 @@ void main() {
 
 #if defined(ENABLE_UV2_INTERP) || defined(USE_LIGHTMAP)
 	uv2_interp = uv2_attrib;
+#endif
+
+#if defined(OVERRIDE_POSITION)
+	highp vec4 position;
 #endif
 
 #if !defined(SKIP_TRANSFORM_USED) && defined(VERTEX_WORLD_COORDS_USED)
@@ -640,24 +650,55 @@ VERTEX_SHADER_CODE
 #endif //fog
 
 #endif //use vertex lighting
+
+#if defined(OVERRIDE_POSITION)
+	gl_Position = position;
+#else
 	gl_Position = projection_matrix * vec4(vertex_interp, 1.0);
+#endif
+
+#if defined(RENDER_DEPTH) && defined(USE_RGBA_SHADOWS)
+	position_interp = gl_Position;
+#endif
 }
 
 /* clang-format off */
 [fragment]
-#extension GL_ARB_shader_texture_lod : enable
 
-#ifndef GL_ARB_shader_texture_lod
-#define texture2DLod(img, coord, lod) texture2D(img, coord)
-#define textureCubeLod(img, coord, lod) textureCube(img, coord)
+#ifndef USE_GLES_OVER_GL
+
+#ifdef GL_EXT_shader_texture_lod
+#extension GL_EXT_shader_texture_lod : enable
+#define texture2DLod(img, coord, lod) texture2DLodEXT(img, coord, lod)
+#define textureCubeLod(img, coord, lod) textureCubeLodEXT(img, coord, lod)
 #endif
 
+#endif
+
+#ifdef GL_ARB_shader_texture_lod
+#extension GL_ARB_shader_texture_lod : enable
+#endif
+
+#if !defined(GL_EXT_shader_texture_lod) && !defined(GL_ARB_shader_texture_lod)
+#define texture2DLod(img, coord, lod) texture2D(img, coord, lod)
+#define textureCubeLod(img, coord, lod) textureCube(img, coord, lod)
+#endif
+
+
+
+
 #ifdef USE_GLES_OVER_GL
+#define lowp
 #define mediump
 #define highp
 #else
-precision mediump float;
+#if defined(USE_HIGHP_PRECISION)
+precision highp float;
 precision highp int;
+#else
+precision mediump float;
+precision mediump int;
+#endif
 #endif
 
 #include "stdlib.glsl"
@@ -679,6 +720,8 @@ uniform highp mat4 world_transform;
 
 uniform highp float time;
 
+uniform highp vec2 viewport_size;
+
 #if defined(SCREEN_UV_USED)
 uniform vec2 screen_pixel_size;
 #endif
@@ -688,6 +731,9 @@ uniform vec2 screen_pixel_size;
 
 #if defined(SCREEN_TEXTURE_USED)
 uniform highp sampler2D screen_texture; //texunit:-4
+#endif
+#if defined(DEPTH_TEXTURE_USED)
+uniform highp sampler2D depth_texture; //texunit:-4
 #endif
 
 #ifdef USE_REFLECTION_PROBE1
@@ -866,6 +912,8 @@ uniform float ambient_energy;
 
 #ifdef USE_LIGHTING
 
+uniform highp vec4 shadow_color;
+
 #ifdef USE_VERTEX_LIGHTING
 
 //get from vertex
@@ -878,6 +926,7 @@ uniform highp vec3 light_direction; //may be used by fog, so leave here
 //done in fragment
 // general for all lights
 uniform highp vec4 light_color;
+
 uniform highp float light_specular;
 
 // directional
@@ -933,6 +982,10 @@ uniform vec4 light_clamp;
 //
 // varyings
 //
+
+#if defined(RENDER_DEPTH) && defined(USE_RGBA_SHADOWS)
+varying highp vec4 position_interp;
+#endif
 
 varying highp vec3 vertex_interp;
 varying vec3 normal_interp;
@@ -1121,7 +1174,7 @@ LIGHT_SHADER_CODE
 	float NdotL = dot(N, L);
 	float cNdotL = max(NdotL, 0.0); // clamped NdotL
 	float NdotV = dot(N, V);
-	float cNdotV = max(NdotV, 0.0);
+	float cNdotV = max(abs(NdotV), 1e-6);
 
 #if defined(DIFFUSE_BURLEY) || defined(SPECULAR_BLINN) || defined(SPECULAR_SCHLICK_GGX) || defined(LIGHT_USE_CLEARCOAT)
 	vec3 H = normalize(V + L);
@@ -1250,7 +1303,7 @@ LIGHT_SHADER_CODE
 		float YdotH = dot(B, H);
 		float D = D_GGX_anisotropic(cNdotH, ax, ay, XdotH, YdotH, cNdotH);
 		//float G = G_GGX_anisotropic_2cos(cNdotL, ax, ay, XdotH, YdotH) * G_GGX_anisotropic_2cos(cNdotV, ax, ay, XdotH, YdotH);
-		float G = V_GGX_anisotropic(ax, ay, dot(T, V), dot(T, L), dot(B, V), dot(B, L), cNdotV, cNdotL))
+		float G = V_GGX_anisotropic(ax, ay, dot(T, V), dot(T, L), dot(B, V), dot(B, L), cNdotV, cNdotL);
 
 #else
 		float alpha = roughness * roughness;
@@ -1294,8 +1347,18 @@ LIGHT_SHADER_CODE
 
 #ifdef USE_SHADOW
 
-#define SAMPLE_SHADOW_TEXEL(p_shadow, p_pos, p_depth) step(p_depth, texture2D(p_shadow, p_pos).r)
-#define SAMPLE_SHADOW_TEXEL_PROJ(p_shadow, p_pos) step(p_pos.z, texture2DProj(p_shadow, p_pos).r)
+#ifdef USE_RGBA_SHADOWS
+
+#define SHADOW_DEPTH(m_val) dot(m_val, vec4(1.0 / (256.0 * 256.0 * 256.0), 1.0 / (256.0 * 256.0), 1.0 / 256.0, 1.0))
+
+#else
+
+#define SHADOW_DEPTH(m_val) (m_val).r
+
+#endif
+
+#define SAMPLE_SHADOW_TEXEL(p_shadow, p_pos, p_depth) step(p_depth, SHADOW_DEPTH(texture2D(p_shadow, p_pos)))
+#define SAMPLE_SHADOW_TEXEL_PROJ(p_shadow, p_pos) step(p_pos.z, SHADOW_DEPTH(texture2DProj(p_shadow, p_pos)))
 
 float sample_shadow(highp sampler2D shadow, highp vec4 spos) {
 
@@ -1382,6 +1445,7 @@ void main() {
 		discard;
 #endif
 	highp vec3 vertex = vertex_interp;
+	vec3 view = -normalize(vertex_interp);
 	vec3 albedo = vec3(1.0);
 	vec3 transmission = vec3(0.0);
 	float metallic = 0.0;
@@ -1455,10 +1519,16 @@ FRAGMENT_SHADER_CODE
 	vec3 diffuse_light = vec3(0.0, 0.0, 0.0);
 	vec3 ambient_light = vec3(0.0, 0.0, 0.0);
 
-	vec3 eye_position = -normalize(vertex_interp);
+	vec3 eye_position = view;
 
 #if defined(ALPHA_SCISSOR_USED)
 	if (alpha < alpha_scissor) {
+		discard;
+	}
+#endif
+
+#ifdef USE_DEPTH_PREPASS
+	if (alpha < 0.99) {
 		discard;
 	}
 #endif
@@ -1550,14 +1620,14 @@ FRAGMENT_SHADER_CODE
 #ifdef USE_LIGHTMAP_CAPTURE
 	{
 		vec3 cone_dirs[12] = vec3[](
-				vec3(0, 0, 1),
-				vec3(0.866025, 0, 0.5),
+				vec3(0.0, 0.0, 1.0),
+				vec3(0.866025, 0.0, 0.5),
 				vec3(0.267617, 0.823639, 0.5),
 				vec3(-0.700629, 0.509037, 0.5),
 				vec3(-0.700629, -0.509037, 0.5),
 				vec3(0.267617, -0.823639, 0.5),
-				vec3(0, 0, -1),
-				vec3(0.866025, 0, -0.5),
+				vec3(0.0, 0.0, -1.0),
+				vec3(0.866025, 0.0, -0.5),
 				vec3(0.267617, 0.823639, -0.5),
 				vec3(-0.700629, 0.509037, -0.5),
 				vec3(-0.700629, -0.509037, -0.5),
@@ -1639,7 +1709,7 @@ FRAGMENT_SHADER_CODE
 
 		float shadow = sample_shadow(light_shadow_atlas, splane);
 
-		light_att *= shadow;
+		light_att *= mix(shadow_color.rgb, vec3(1.0), shadow);
 	}
 #endif
 
@@ -1716,7 +1786,7 @@ FRAGMENT_SHADER_CODE
 			shadow_att = mix(shadow_att, shadow_att2, pssm_blend);
 		}
 #endif
-		light_att *= shadow_att;
+		light_att *= mix(shadow_color.rgb, vec3(1.0), shadow_att);
 	}
 
 #endif //LIGHT_USE_PSSM4
@@ -1757,14 +1827,14 @@ FRAGMENT_SHADER_CODE
 			shadow_att = mix(shadow_att, shadow_att2, pssm_blend);
 		}
 #endif
-		light_att *= shadow_att;
+		light_att *= mix(shadow_color.rgb, vec3(1.0), shadow_att);
 	}
 
 #endif //LIGHT_USE_PSSM2
 
 #if !defined(LIGHT_USE_PSSM4) && !defined(LIGHT_USE_PSSM2)
 
-	light_att *= sample_shadow(light_directional_shadow, shadow_coord);
+	light_att *= mix(shadow_color.rgb, vec3(1.0), sample_shadow(light_directional_shadow, shadow_coord));
 #endif //orthogonal
 
 #else //fragment version of pssm
@@ -1864,7 +1934,7 @@ FRAGMENT_SHADER_CODE
 			}
 #endif
 
-			light_att *= shadow;
+			light_att *= mix(shadow_color.rgb, vec3(1.0), shadow);
 		}
 	}
 #endif //use vertex lighting
@@ -1910,10 +1980,9 @@ FRAGMENT_SHADER_CODE
 #ifdef USE_SHADOW
 	{
 		highp vec4 splane = shadow_coord;
-		splane.xyz /= splane.w;
 
 		float shadow = sample_shadow(light_shadow_atlas, splane);
-		light_att *= shadow;
+		light_att *= mix(shadow_color.rgb, vec3(1.0), shadow);
 	}
 #endif
 
@@ -2009,7 +2078,12 @@ FRAGMENT_SHADER_CODE
 
 #if defined(USE_VERTEX_LIGHTING)
 
+#if defined(BASE_PASS)
 	gl_FragColor.rgb = mix(gl_FragColor.rgb, fog_interp.rgb, fog_interp.a);
+#else
+	gl_FragColor.rgb *= (1.0 - fog_interp.a);
+#endif // BASE_PASS
+
 #else //pixel based fog
 	float fog_amount = 0.0;
 
@@ -2043,11 +2117,25 @@ FRAGMENT_SHADER_CODE
 	}
 #endif
 
+#if defined(BASE_PASS)
 	gl_FragColor.rgb = mix(gl_FragColor.rgb, fog_color, fog_amount);
+#else
+	gl_FragColor.rgb *= (1.0 - fog_amount);
+#endif // BASE_PASS
 
 #endif //use vertex lit
 
 #endif // defined(FOG_DEPTH_ENABLED) || defined(FOG_HEIGHT_ENABLED)
 
-#endif // not RENDER_DEPTH
+#else // not RENDER_DEPTH
+//depth render
+#ifdef USE_RGBA_SHADOWS
+
+	highp float depth = ((position_interp.z / position_interp.w) + 1.0) * 0.5 + 0.0; // bias
+	highp vec4 comp = fract(depth * vec4(256.0 * 256.0 * 256.0, 256.0 * 256.0, 256.0, 1.0));
+	comp -= comp.xxyz * vec4(0.0, 1.0 / 256.0, 1.0 / 256.0, 1.0 / 256.0);
+	gl_FragColor = comp;
+
+#endif
+#endif
 }

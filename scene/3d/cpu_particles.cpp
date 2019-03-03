@@ -5,8 +5,8 @@
 /*                           GODOT ENGINE                                */
 /*                      https://godotengine.org                          */
 /*************************************************************************/
-/* Copyright (c) 2007-2018 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2018 Godot Engine contributors (cf. AUTHORS.md)    */
+/* Copyright (c) 2007-2019 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2014-2019 Godot Engine contributors (cf. AUTHORS.md)    */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -217,7 +217,7 @@ String CPUParticles::get_configuration_warning() const {
 	if (!mesh_found) {
 		if (warnings != String())
 			warnings += "\n";
-		warnings += "- " + TTR("Nothing is visible because no mesh has not been assigned.");
+		warnings += "- " + TTR("Nothing is visible because no mesh has been assigned.");
 	}
 
 	if (!anim_material_found && (get_param(PARAM_ANIM_SPEED) != 0.0 || get_param(PARAM_ANIM_OFFSET) != 0.0 ||
@@ -523,7 +523,7 @@ void CPUParticles::_particles_process(float p_delta) {
 	Basis velocity_xform;
 	if (!local_coords) {
 		emission_xform = get_global_transform();
-		velocity_xform = emission_xform.basis.inverse().transposed();
+		velocity_xform = emission_xform.basis;
 	}
 
 	for (int i = 0; i < pcount; i++) {
@@ -605,19 +605,14 @@ void CPUParticles::_particles_process(float p_delta) {
 			p.hue_rot_rand = Math::randf();
 			p.anim_offset_rand = Math::randf();
 
-			float angle1_rad;
-			float angle2_rad;
-
 			if (flags[FLAG_DISABLE_Z]) {
-
-				angle1_rad = (Math::randf() * 2.0 - 1.0) * Math_PI * spread / 180.0;
+				float angle1_rad = (Math::randf() * 2.0 - 1.0) * Math_PI * spread / 180.0;
 				Vector3 rot = Vector3(Math::cos(angle1_rad), Math::sin(angle1_rad), 0.0);
 				p.velocity = rot * parameters[PARAM_INITIAL_LINEAR_VELOCITY] * Math::lerp(1.0f, float(Math::randf()), randomness[PARAM_INITIAL_LINEAR_VELOCITY]);
-
 			} else {
 				//initiate velocity spread in 3D
-				angle1_rad = (Math::randf() * 2.0 - 1.0) * Math_PI * spread / 180.0;
-				angle2_rad = (Math::randf() * 2.0 - 1.0) * (1.0 - flatness) * Math_PI * spread / 180.0;
+				float angle1_rad = (Math::randf() * 2.0 - 1.0) * Math_PI * spread / 180.0;
+				float angle2_rad = (Math::randf() * 2.0 - 1.0) * (1.0 - flatness) * Math_PI * spread / 180.0;
 
 				Vector3 direction_xz = Vector3(Math::sin(angle1_rad), 0, Math::cos(angle1_rad));
 				Vector3 direction_yz = Vector3(0, Math::sin(angle2_rad), Math::cos(angle2_rad));
@@ -691,7 +686,7 @@ void CPUParticles::_particles_process(float p_delta) {
 
 			if (flags[FLAG_DISABLE_Z]) {
 				p.velocity.z = 0.0;
-				p.velocity.z = 0.0;
+				p.transform.origin.z = 0.0;
 			}
 
 		} else if (!p.active) {
@@ -757,15 +752,15 @@ void CPUParticles::_particles_process(float p_delta) {
 			}
 
 			Vector3 force = gravity;
-			Vector3 pos = p.transform.origin;
+			Vector3 position = p.transform.origin;
 			if (flags[FLAG_DISABLE_Z]) {
-				pos.z = 0.0;
+				position.z = 0.0;
 			}
 			//apply linear acceleration
 			force += p.velocity.length() > 0.0 ? p.velocity.normalized() * (parameters[PARAM_LINEAR_ACCEL] + tex_linear_accel) * Math::lerp(1.0f, rand_from_seed(alt_seed), randomness[PARAM_LINEAR_ACCEL]) : Vector3();
 			//apply radial acceleration
 			Vector3 org = emission_xform.origin;
-			Vector3 diff = pos - org;
+			Vector3 diff = position - org;
 			force += diff.length() > 0.0 ? diff.normalized() * (parameters[PARAM_RADIAL_ACCEL] + tex_radial_accel) * Math::lerp(1.0f, rand_from_seed(alt_seed), randomness[PARAM_RADIAL_ACCEL]) : Vector3();
 			//apply tangential acceleration;
 			if (flags[FLAG_DISABLE_Z]) {
@@ -1243,7 +1238,7 @@ void CPUParticles::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "emitting"), "set_emitting", "is_emitting");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "amount", PROPERTY_HINT_EXP_RANGE, "1,1000000,1"), "set_amount", "get_amount");
 	ADD_GROUP("Time", "");
-	ADD_PROPERTY(PropertyInfo(Variant::REAL, "lifetime", PROPERTY_HINT_EXP_RANGE, "0.01,600.0,0.01"), "set_lifetime", "get_lifetime");
+	ADD_PROPERTY(PropertyInfo(Variant::REAL, "lifetime", PROPERTY_HINT_EXP_RANGE, "0.01,600.0,0.01,or_greater"), "set_lifetime", "get_lifetime");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "one_shot"), "set_one_shot", "get_one_shot");
 	ADD_PROPERTY(PropertyInfo(Variant::REAL, "preprocess", PROPERTY_HINT_EXP_RANGE, "0.00,600.0,0.01"), "set_pre_process_time", "get_pre_process_time");
 	ADD_PROPERTY(PropertyInfo(Variant::REAL, "speed_scale", PROPERTY_HINT_RANGE, "0,64,0.01"), "set_speed_scale", "get_speed_scale");
@@ -1361,9 +1356,9 @@ void CPUParticles::_bind_methods() {
 	ADD_PROPERTYI(PropertyInfo(Variant::REAL, "angle_random", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_param_randomness", "get_param_randomness", PARAM_ANGLE);
 	ADD_PROPERTYI(PropertyInfo(Variant::OBJECT, "angle_curve", PROPERTY_HINT_RESOURCE_TYPE, "Curve"), "set_param_curve", "get_param_curve", PARAM_ANGLE);
 	ADD_GROUP("Scale", "");
-	ADD_PROPERTYI(PropertyInfo(Variant::REAL, "scale", PROPERTY_HINT_RANGE, "0,1000,0.01,or_greater"), "set_param", "get_param", PARAM_SCALE);
-	ADD_PROPERTYI(PropertyInfo(Variant::REAL, "scale_random", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_param_randomness", "get_param_randomness", PARAM_SCALE);
-	ADD_PROPERTYI(PropertyInfo(Variant::OBJECT, "scale_curve", PROPERTY_HINT_RESOURCE_TYPE, "Curve"), "set_param_curve", "get_param_curve", PARAM_SCALE);
+	ADD_PROPERTYI(PropertyInfo(Variant::REAL, "scale_amount", PROPERTY_HINT_RANGE, "0,1000,0.01,or_greater"), "set_param", "get_param", PARAM_SCALE);
+	ADD_PROPERTYI(PropertyInfo(Variant::REAL, "scale_amount_random", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_param_randomness", "get_param_randomness", PARAM_SCALE);
+	ADD_PROPERTYI(PropertyInfo(Variant::OBJECT, "scale_amount_curve", PROPERTY_HINT_RESOURCE_TYPE, "Curve"), "set_param_curve", "get_param_curve", PARAM_SCALE);
 	ADD_GROUP("Color", "");
 	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "color"), "set_color", "get_color");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "color_ramp", PROPERTY_HINT_RESOURCE_TYPE, "Gradient"), "set_color_ramp", "get_color_ramp");

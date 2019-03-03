@@ -5,8 +5,8 @@
 /*                           GODOT ENGINE                                */
 /*                      https://godotengine.org                          */
 /*************************************************************************/
-/* Copyright (c) 2007-2018 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2018 Godot Engine contributors (cf. AUTHORS.md)    */
+/* Copyright (c) 2007-2019 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2014-2019 Godot Engine contributors (cf. AUTHORS.md)    */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -2149,7 +2149,7 @@ void Variant::set(const Variant &p_index, const Variant &p_value, bool *r_valid)
 				int idx = p_index;
 				if (idx < 0)
 					idx += 4;
-				if (idx >= 0 || idx < 4) {
+				if (idx >= 0 && idx < 4) {
 					Color *v = reinterpret_cast<Color *>(_data._mem);
 					(*v)[idx] = p_value;
 					valid = true;
@@ -2524,7 +2524,7 @@ Variant Variant::get(const Variant &p_index, bool *r_valid) const {
 				int idx = p_index;
 				if (idx < 0)
 					idx += 4;
-				if (idx >= 0 || idx < 4) {
+				if (idx >= 0 && idx < 4) {
 					const Color *v = reinterpret_cast<const Color *>(_data._mem);
 					valid = true;
 					return (*v)[idx];
@@ -3496,15 +3496,15 @@ void Variant::blend(const Variant &a, const Variant &b, float c, Variant &r_dst)
 		case COLOR: {
 			const Color *ca = reinterpret_cast<const Color *>(a._data._mem);
 			const Color *cb = reinterpret_cast<const Color *>(b._data._mem);
-			float r = ca->r + cb->r * c;
-			float g = ca->g + cb->g * c;
-			float b = ca->b + cb->b * c;
-			float a = ca->a + cb->a * c;
-			r = r > 1.0 ? 1.0 : r;
-			g = g > 1.0 ? 1.0 : g;
-			b = b > 1.0 ? 1.0 : b;
-			a = a > 1.0 ? 1.0 : a;
-			r_dst = Color(r, g, b, a);
+			float new_r = ca->r + cb->r * c;
+			float new_g = ca->g + cb->g * c;
+			float new_b = ca->b + cb->b * c;
+			float new_a = ca->a + cb->a * c;
+			new_r = new_r > 1.0 ? 1.0 : new_r;
+			new_g = new_g > 1.0 ? 1.0 : new_g;
+			new_b = new_b > 1.0 ? 1.0 : new_b;
+			new_a = new_a > 1.0 ? 1.0 : new_a;
+			r_dst = Color(new_r, new_g, new_b, new_a);
 		}
 			return;
 		default: {

@@ -122,15 +122,12 @@ def configure(env):
     ## Link flags
 
     env.Append(LINKFLAGS=['-s', 'BINARYEN=1'])
+    env.Append(LINKFLAGS=['-s', 'BINARYEN_TRAP_MODE=\'clamp\''])
 
     # Allow increasing memory buffer size during runtime. This is efficient
     # when using WebAssembly (in comparison to asm.js) and works well for
     # us since we don't know requirements at compile-time.
     env.Append(LINKFLAGS=['-s', 'ALLOW_MEMORY_GROWTH=1'])
-
-    # Since we use both memory growth and MEMFS preloading,
-    # this avoids unecessary copying on start-up.
-    env.Append(LINKFLAGS=['--no-heap-copy'])
 
     # This setting just makes WebGL 2 APIs available, it does NOT disable WebGL 1.
     env.Append(LINKFLAGS=['-s', 'USE_WEBGL2=1'])
@@ -139,7 +136,3 @@ def configure(env):
 
     # TODO: Reevaluate usage of this setting now that engine.js manages engine runtime.
     env.Append(LINKFLAGS=['-s', 'NO_EXIT_RUNTIME=1'])
-
-    # TODO: Move that to opus module's config.
-    if 'module_opus_enabled' in env and env['module_opus_enabled']:
-        env.opus_fixed_point = 'yes'
